@@ -203,7 +203,7 @@ export function Footer({ onNavigate }: FooterProps) {
             </div>
           </div>
 
-          <div className="flex flex-col items-start md:col-span-3 md:items-end justify-between">
+          <div className="flex flex-col items-center pt-2 md:col-span-3 md:items-end md:self-center md:pt-0">
             <StudioCatCompanion />
           </div>
         </div>
