@@ -1,0 +1,8 @@
+{
+  "name": "Balentine Art",
+  "description": "A cozy woodland artist studio, gallery, and online art shop by Jorja featuring one-of-a-kind acrylic paintings, ACEO mini art cards, hand-drawn stickers, and custom commissions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

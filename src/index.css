@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+
+  --color-ivory: #FBF8F1;
+  --color-parchment: #F4EFE4;
+  --color-linen: #EFE8DA;
+  --color-stone-hairline: #DDD4C4;
+  --color-charcoal: #1F241E;
+  --color-moss: #5B6458;
+  --color-forest: #24402E;
+  --color-fern: #5E7C64;
+  --color-clay: #B56A3B;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    background-color: #FBF8F1;
+    color: #1F241E;
+    scroll-behavior: smooth;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-serif);
+    text-wrap: balance;
+  }
+
+  button, a, input, select, textarea {
+    outline-offset: 2px;
+  }
+
+  :focus-visible {
+    outline: 2px solid #24402E;
+    outline-offset: 2px;
+  }
+}
+
+/* Subtle organic woodland paper grain overlay */
+.paper-grain {
+  background-color: #FBF8F1;
+  background-image:
+    radial-gradient(rgba(36, 64, 46, 0.035) 1px, transparent 0),
+    radial-gradient(rgba(181, 106, 59, 0.03) 1px, transparent 0);
+  background-size: 28px 28px, 42px 42px;
+  background-position: 0 0, 14px 18px;
+}
+
+.parchment-surface {
+  background-color: #F4EFE4;
+  background-image: radial-gradient(rgba(31, 36, 30, 0.025) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
