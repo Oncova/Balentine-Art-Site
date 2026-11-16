@@ -77,14 +77,23 @@ export function getNewsletterSegmentId(): string | null {
   return seg;
 }
 
-export function getNewsletterSenderAddress(): string {
-  return 'Jorja | Little Wild Things <wildlittlethings@zuldeira.com>';
-}
-
 export function getEmailFromAddress(): string | null {
   const from = process.env.EMAIL_FROM?.trim();
   if (!from || from === 'Little Wild Things <hello@example.com>') return null;
   return from;
+}
+
+export function getNewsletterSenderAddress(): string {
+  const configuredFrom = getEmailFromAddress();
+  if (configuredFrom) {
+    if (configuredFrom.includes('<') && configuredFrom.includes('>')) {
+      return configuredFrom;
+    }
+    if (isValidEmailAddress(configuredFrom)) {
+      return `Jorja | Little Wild Things <${configuredFrom}>`;
+    }
+  }
+  return 'Jorja | Little Wild Things <wildlittlethings@zuldeira.com>';
 }
 
 export function getContactNotificationEmail(): string | null {
@@ -821,3 +830,85 @@ export async function sendNewsletterConfirmationEmail(params: {
     };
   }
 }
+
+export interface NewsletterSetupDiagnostics {
+  resendSendKeyConfigured: boolean;
+  resendContactsKeyConfigured: boolean;
+  segmentIdConfigured: boolean;
+  emailFromConfigured: boolean;
+  effectiveSenderDomain: string | null;
+  segmentVerified: boolean;
+  segmentError: string | null;
+  domainCheckStatus: 'verified' | 'unverified' | 'unknown';
+  domainCheckDetail: string | null;
+}
+
+export async function verifyNewsletterResendSetup(): Promise<NewsletterSetupDiagnostics> {
+  const resendSendKeyConfigured = isResendConfigured();
+  const resendContactsKeyConfigured = isResendContactsConfigured();
+  const segmentId = getNewsletterSegmentId();
+  const emailFromConfigured = Boolean(getEmailFromAddress());
+
+  const sender = getNewsletterSenderAddress();
+  const emailMatch = sender.match(/<([^>]+)>/)?.[1] || sender;
+  const effectiveSenderDomain = emailMatch.includes('@') ? emailMatch.split('@')[1].toLowerCase() : null;
+
+  let segmentVerified = false;
+  let segmentError: string | null = null;
+  if (resendContactsKeyConfigured && segmentId) {
+    try {
+      const resendContacts = new Resend(process.env.RESEND_CONTACTS_API_KEY!.trim());
+      const segRes = await resendContacts.segments.get(segmentId);
+      if (segRes.error) {
+        segmentError = segRes.error.message || 'Unable to verify segment with Resend Contacts API.';
+      } else if (segRes.data?.id) {
+        segmentVerified = true;
+      }
+    } catch (err) {
+      segmentError = err instanceof Error ? err.message : 'Segment check failed.';
+    }
+  }
+
+  let domainCheckStatus: 'verified' | 'unverified' | 'unknown' = 'unknown';
+  let domainCheckDetail: string | null = null;
+  if (resendSendKeyConfigured && effectiveSenderDomain) {
+    if (effectiveSenderDomain === 'resend.dev') {
+      domainCheckStatus = 'unknown';
+      domainCheckDetail = 'Using Resend shared testing domain (resend.dev); recipients may be restricted to your own Resend account email.';
+    } else {
+      try {
+        const resend = new Resend(process.env.RESEND_API_KEY!.trim());
+        const domainsRes = await resend.domains.list();
+        if (domainsRes.error) {
+          domainCheckDetail = domainsRes.error.message;
+        } else {
+          const match = (domainsRes.data?.data || []).find(
+            (d) => d.name.toLowerCase() === effectiveSenderDomain
+          );
+          if (match) {
+            domainCheckStatus = match.status === 'verified' ? 'verified' : 'unverified';
+            domainCheckDetail = `Domain status in Resend: ${match.status}`;
+          } else {
+            domainCheckStatus = 'unverified';
+            domainCheckDetail = `Sender domain "${effectiveSenderDomain}" not found in Resend Domains.`;
+          }
+        }
+      } catch (err) {
+        domainCheckDetail = err instanceof Error ? err.message : 'Domain check unavailable.';
+      }
+    }
+  }
+
+  return {
+    resendSendKeyConfigured,
+    resendContactsKeyConfigured,
+    segmentIdConfigured: Boolean(segmentId),
+    emailFromConfigured,
+    effectiveSenderDomain,
+    segmentVerified,
+    segmentError,
+    domainCheckStatus,
+    domainCheckDetail,
+  };
+}
+

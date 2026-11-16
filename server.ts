@@ -44,6 +44,7 @@ import {
   sendOrderConfirmationEmail,
   sendShippingTrackingEmail,
   upsertConfirmedNewsletterContact,
+  verifyNewsletterResendSetup,
 } from './server/email.ts';
 
 initDatabase();
@@ -977,9 +978,18 @@ app.post('/api/newsletter', async (req, res) => {
 
   if (!sendRes.sent) {
     db.prepare('DELETE FROM newsletter_verification_tokens WHERE token_hash = ?').run(tokenHash);
+    const providerHint = sendRes.errorMessage || '';
+    const lowerHint = providerHint.toLowerCase();
+    let clientMessage =
+      'We could not send your confirmation email right now. Please check your email address and try again.';
+    if (lowerHint.includes('verify a domain') || lowerHint.includes('testing emails')) {
+      clientMessage =
+        'Email sending is currently restricted by Resend domain verification (testing mode).';
+    } else if (lowerHint.includes('domain') && lowerHint.includes('not verified')) {
+      clientMessage = 'The newsletter sender domain is not verified in Resend yet.';
+    }
     return res.status(502).json({
-      error:
-        'We could not send your confirmation email right now. Please check your email address and try again.',
+      error: clientMessage,
     });
   }
 
@@ -988,6 +998,17 @@ app.post('/api/newsletter', async (req, res) => {
     subscribed: false,
     message: 'One little step left! Check your inbox to confirm your subscription. 🌿',
   });
+});
+
+app.get('/api/newsletter/status', async (_req, res) => {
+  try {
+    const diag = await verifyNewsletterResendSetup();
+    res.json(diag);
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : 'Unable to check newsletter status.',
+    });
+  }
 });
 
 app.post('/api/newsletter/confirm', async (req, res) => {
