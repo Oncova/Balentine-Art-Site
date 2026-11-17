@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle2, Lock } from 'lucide-react';
 import { CartItem, OrderRecord, formatMoney } from '../types/shop';
+import { OrderSuccess } from './OrderSuccess';
+
 
 interface CheckoutPageProps {
   items: CartItem[];
