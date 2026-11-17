@@ -10,104 +10,64 @@ export function PoliciesPage({ shippingRates, onNavigate }: PoliciesPageProps) {
   return (
     <div className="paper-grain">
       <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
-        <p className="text-xs font-medium tracking-widest uppercase text-[#5E7C64]">
-          Studio Care &amp; Policies
+        <p className="text-xs font-medium uppercase tracking-widest text-[#5E7C64]">Studio care &amp; policies</p>
+        <h1 className="mt-2 font-serif text-4xl font-semibold text-[#1F241E] sm:text-5xl">Shipping &amp; Return Policies</h1>
+        <p className="mt-3 text-base leading-7 text-[#5B6458]">
+          Every little wild thing leaves the studio carefully packed and protected. Shipping prices depend on the
+          artwork's size and packaging needs; custom work follows a separate creation timeline.
         </p>
-        <h1 className="mt-2 font-serif text-4xl font-semibold text-[#1F241E] sm:text-5xl">
-          Shipping &amp; Return Policies
-        </h1>
-        <p className="mt-3 text-base text-[#5B6458]">
-          Every painting, ACEO card, and sticker pack leaves the studio carefully protected so it
-          arrives ready to enjoy.
-        </p>
-
-        {/* Live Configurable Shipping Rates Table */}
-        <section className="mt-10">
-          <h2 className="font-serif text-2xl font-semibold text-[#1F241E]">
-            Current Studio Shipping Rates
-          </h2>
-          <div className="mt-4 overflow-hidden rounded-xl border border-[#DDD4C4] bg-[#FBF8F1]">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-[#DDD4C4] bg-[#F4EFE4] text-xs uppercase tracking-wider text-[#5B6458]">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Method</th>
-                  <th className="px-4 py-3 font-medium">Rate</th>
-                  <th className="px-4 py-3 font-medium">Free Shipping</th>
-                  <th className="px-4 py-3 font-medium">Estimated Transit</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#DDD4C4]">
-                {shippingRates.map((rate) => (
-                  <tr key={rate.id}>
-                    <td className="px-4 py-3.5 font-medium text-[#1F241E]">{rate.name}</td>
-                    <td className="px-4 py-3.5 tabular-nums text-[#1F241E]">
-                      {formatMoney(rate.flatRateCents)}
-                    </td>
-                    <td className="px-4 py-3.5 tabular-nums text-[#5B6458]">
-                      {rate.freeAboveCents !== null
-                        ? `Orders ${formatMoney(rate.freeAboveCents)}+`
-                        : 'Flat rate'}
-                    </td>
-                    <td className="px-4 py-3.5 text-[#5B6458]">{rate.estimatedDays}</td>
-                  </tr>
-                ))}
+        <section className="mt-9 rounded-2xl border border-[#DDD4C4] bg-[#FBF8F1] p-5 sm:p-7">
+          <h2 className="font-serif text-2xl font-semibold text-[#24402E]">Ready-to-ship artwork</h2>
+          <p className="mt-2 text-sm leading-7 text-[#5B6458]">
+            In-stock pieces are ordinarily prepared for dispatch within 2–4 business days after confirmed payment.
+            Carrier transit time begins after dispatch, not when you place the order. Larger paintings can take longer
+            to protect and package. We'll email you when your parcel has been shipped.
+          </p>
+          <div className="mt-5 overflow-x-auto rounded-xl border border-[#DDD4C4]">
+            <table className="w-full min-w-[620px] text-left text-sm">
+              <thead className="bg-[#F4EFE4] text-xs uppercase tracking-wide text-[#5B6458]"><tr>
+                <th className="px-4 py-3 font-medium">Size &amp; packaging</th>
+                <th className="px-4 py-3 font-medium">Shipping charge</th>
+                <th className="px-4 py-3 font-medium">Estimated transit</th>
+              </tr></thead>
+              <tbody className="divide-y divide-[#DDD4C4] bg-white">
+                {shippingRates.map(r => <tr key={r.id}>
+                  <td className="px-4 py-3 font-medium text-[#1F241E]">{r.name}</td>
+                  <td className="px-4 py-3 tabular-nums text-[#24402E]">{formatMoney(r.flatRateCents)}</td>
+                  <td className="px-4 py-3 text-[#5B6458]">{r.estimatedDays}</td>
+                </tr>)}
               </tbody>
             </table>
           </div>
+          <p className="mt-4 text-xs leading-6 text-[#5B6458]">
+            These rates are estimates for the contiguous United States. Multiple artworks may require separate protective packages.
+            Alaska, Hawaii, unusually large or framed artwork, and special shipping arrangements need a studio quote before payment.
+            We do not offer international checkout at this time.
+          </p>
         </section>
-
-        <BotanicalDivider className="my-10" />
-
-        <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+        <section className="mt-7 rounded-2xl border border-[#C9D7C2] bg-[#F0F3E8] p-5 sm:p-7">
+          <p className="text-xs font-semibold uppercase tracking-widest text-[#658064]">Special request orders</p>
+          <h2 className="mt-2 font-serif text-2xl text-[#24402E]">Created just for you takes a little longer</h2>
+          <p className="mt-3 text-sm leading-7 text-[#4E5A4B]">
+            Custom commissions, personalized illustrations, and made-to-order pieces are <strong>not covered by the
+            in-stock dispatch timeframe</strong>. Because each piece is created to your specifications, Jorja will
+            confirm the artwork price, production schedule, shipping cost, and estimated completion date in a quote
+            before accepting payment. Requested deadlines are considered but are not guaranteed until confirmed in writing.
+          </p>
+          <button type="button" onClick={() => onNavigate('/commissions')} className="mt-5 min-h-[44px] rounded-xl bg-[#24402E] px-5 py-3 text-sm font-semibold text-white">Request custom artwork</button>
+        </section>
+        <BotanicalDivider className="my-9" />
+        <div className="grid gap-7 md:grid-cols-2">
           <section className="space-y-3">
-            <h2 className="font-serif text-2xl font-semibold text-[#1F241E]">
-              Packaging &amp; Dispatch Timing
-            </h2>
-            <p className="text-sm leading-relaxed text-[#5B6458]">
-              Orders ship within 2–4 business days after verified payment confirmation. You will
-              receive an order confirmation email immediately upon checkout and a second tracking
-              email as soon as the parcel is scanned by the carrier.
-            </p>
-            <p className="text-sm leading-relaxed text-[#5B6458]">
-              Stickers and 2.5 × 3.5 in ACEO cards travel in rigid archival stay-flat mailers with
-              moisture-resistant sleeves. Original stretched canvases are wrapped in glassine paper,
-              corner-protected, and boxed in double-walled kraft cartons.
-            </p>
+            <h2 className="font-serif text-2xl font-semibold text-[#1F241E]">Packaging &amp; care</h2>
+            <p className="text-sm leading-7 text-[#5B6458]">Stickers and small ACEO art cards are protected in rigid mailers or other suitable packaging. Larger flat prints and stretched canvases require different protective materials and boxes; shipping rates therefore depend on size.</p>
+            <p className="text-sm leading-7 text-[#5B6458]">For questions about a specific size, framing, combined shipments, or gift deadlines, contact the studio before checkout.</p>
           </section>
-
           <section className="space-y-3">
-            <h2 className="font-serif text-2xl font-semibold text-[#1F241E]">
-              Returns &amp; Damaged-in-Transit Care
-            </h2>
-            <p className="text-sm leading-relaxed text-[#5B6458]">
-              Prints and unopened sticker packs may be returned within 14 days of delivery in
-              original condition. Because one-of-a-kind paintings, original ACEO cards, and custom
-              commissions are unique studio works, they are final sale.
-            </p>
-            <p className="text-sm leading-relaxed text-[#5B6458]">
-              If any artwork arrives damaged in transit, please contact Jorja within 7 days with
-              photos of the parcel and artwork—we will replace prints/stickers promptly or arrange a
-              full refund on damaged originals.
-            </p>
+            <h2 className="font-serif text-2xl font-semibold text-[#1F241E]">Returns &amp; shipping damage</h2>
+            <p className="text-sm leading-7 text-[#5B6458]">Prints and unopened sticker packs may be returned within 14 days of delivery in their original condition. One-of-a-kind original art and approved custom commissions are normally final sale, except where the law requires otherwise.</p>
+            <p className="text-sm leading-7 text-[#5B6458]">If your artwork arrives damaged, contact the studio within 7 days with pictures of the packaging and artwork so Jorja can help resolve it.</p>
           </section>
-        </div>
-
-        <div className="mt-10 rounded-xl border border-[#DDD4C4] bg-[#F4EFE4] p-6 sm:flex sm:items-center sm:justify-between">
-          <div>
-            <h3 className="font-serif text-xl font-semibold text-[#1F241E]">
-              Questions about shipping or framing?
-            </h3>
-            <p className="mt-1 text-sm text-[#5B6458]">
-              Send a message through the contact form and Jorja will reply directly.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => onNavigate('/commissions')}
-            className="mt-4 min-h-[42px] rounded-lg bg-[#24402E] px-5 py-2 text-sm font-medium text-[#FBF8F1] sm:mt-0 whitespace-nowrap"
-          >
-            Contact the Studio
-          </button>
         </div>
       </div>
     </div>
