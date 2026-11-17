@@ -36,6 +36,16 @@ export function CheckoutPage({
   const [postalCode, setPostalCode] = useState('');
   const [country, setCountry] = useState('United States');
   const [notes, setNotes] = useState('');
+  const [addressEnabled, setAddressEnabled] = useState(false);
+  const [suggestions, setSuggestions] = useState<Array<{ placeId: string; description: string }>>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [skipSuggestions, setSkipSuggestions] = useState(false);
+  const [addressSessionToken] = useState(() => crypto.randomUUID());
+  const [addressReview, setAddressReview] = useState<null | {
+    line1: string; line2?: string; city: string; state: string; postalCode: string; country: string;
+  }>(null);
+  const [addressConfirmed, setAddressConfirmed] = useState(false);
+  const [shippingEstimateError, setShippingEstimateError] = useState('');
 
   const [totals, setTotals] = useState<{
     subtotalCents: number;
@@ -81,11 +91,70 @@ export function CheckoutPage({
     }
   }, []);
 
+  // Google suggestions are optional until the studio enables its server-side API key.
+  useEffect(() => {
+    fetch('/api/address/config').then(r => r.json()).then(data => setAddressEnabled(Boolean(data.enabled))).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!addressEnabled || skipSuggestions || line1.trim().length < 3) {
+      setSuggestions([]);
+      return;
+    }
+    let canceled = false;
+    const timer = window.setTimeout(async () => {
+      setSuggestionsLoading(true);
+      try {
+        const r = await fetch('/api/address/suggest', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ input: line1.trim(), sessionToken: addressSessionToken }),
+        });
+        const data = await r.json();
+        if (!canceled) setSuggestions(r.ok ? (data.suggestions || []) : []);
+      } catch { if (!canceled) setSuggestions([]); }
+      finally { if (!canceled) setSuggestionsLoading(false); }
+    }, 350);
+    return () => { canceled = true; window.clearTimeout(timer); };
+  }, [line1, addressEnabled, addressSessionToken, skipSuggestions]);
+
+  const selectSuggestion = async (placeId: string) => {
+    setSuggestions([]);
+    try {
+      const r = await fetch('/api/address/details', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ placeId, sessionToken: addressSessionToken }),
+      });
+      const data = await r.json();
+      if (!r.ok || !data.address?.line1) throw new Error('Please enter the full street address manually.');
+      setLine1(data.address.line1);
+      setCity(data.address.city || '');
+      setStateCode(data.address.state || '');
+      setPostalCode(data.address.postalCode || '');
+      setCountry('United States');
+      setSkipSuggestions(true);
+      setAddressReview(null);
+      setAddressConfirmed(false);
+    } catch {
+      setError('Could not load that address. Please complete the address manually.');
+    }
+  };
+
+  const useSuggestedAddress = () => {
+    if (!addressReview) return;
+    setLine1(addressReview.line1); setLine2(addressReview.line2 || '');
+    setCity(addressReview.city); setStateCode(addressReview.state);
+    setPostalCode(addressReview.postalCode); setCountry('United States');
+    setAddressConfirmed(true); setSkipSuggestions(true); setSuggestions([]);
+    setAddressReview(null); setError('');
+  };
+
   useEffect(() => {
     if (items.length === 0) {
       setTotals(null);
+      setShippingEstimateError('');
       return;
     }
+    setShippingEstimateError('');
 
     fetch('/api/checkout/calculate', {
       method: 'POST',
@@ -100,9 +169,10 @@ export function CheckoutPage({
     })
       .then((res) => res.json())
       .then((data) => {
-        if (!data.error) setTotals(data);
+        if (!data.error) { setTotals(data); setShippingEstimateError(''); }
+        else { setTotals(null); setShippingEstimateError(data.error); }
       })
-      .catch(() => {});
+      .catch(() => { setShippingEstimateError('Unable to calculate shipping.'); });
   }, [items]);
 
   const handleCheckout = async (e: FormEvent) => {
@@ -127,6 +197,8 @@ export function CheckoutPage({
             country,
           },
           notes,
+          addressSessionToken,
+          addressConfirmed,
           items: items.map((i) => ({
             artworkId: i.artworkId,
             variationId: i.variationId,
@@ -140,6 +212,10 @@ export function CheckoutPage({
         if (data.code === 'SQUARE_NOT_CONFIGURED') {
           setSquareSetupNotice(data.error);
         } else {
+          if (data.code === 'ADDRESS_REVIEW' || data.code === 'ADDRESS_FIX') {
+            setAddressReview(data.suggestedAddress || null);
+            setAddressConfirmed(false);
+          }
           setError(data.error || 'Unable to start checkout.');
         }
         setSubmitting(false);
@@ -261,9 +337,30 @@ export function CheckoutPage({
                   type="text"
                   required
                   value={line1}
-                  onChange={(e) => setLine1(e.target.value)}
+                  onChange={(e) => {
+                    setLine1(e.target.value); setSkipSuggestions(false);
+                    setAddressConfirmed(false); setAddressReview(null);
+                  }}
+                  autoComplete="off"
+                  aria-autocomplete={addressEnabled ? 'list' : 'none'}
+                  aria-controls="address-suggestions"
                   className="mt-1.5 min-h-[42px] w-full rounded-lg border border-[#DDD4C4] bg-[#F4EFE4]/60 px-3.5 text-sm"
                 />
+                {addressEnabled && <p className="mt-1.5 text-xs text-[#5B6458]">Start typing for address suggestions. We'll check the address before payment.</p>}
+                {addressEnabled && (suggestions.length > 0 || suggestionsLoading) && (
+                  <div id="address-suggestions" role="listbox" aria-label="Suggested United States addresses"
+                    className="mt-2 overflow-hidden rounded-lg border border-[#DDD4C4] bg-white shadow-lg">
+                    {suggestionsLoading && <p className="px-3 py-2 text-xs text-[#5B6458]">Finding addresses...</p>}
+                    {suggestions.map((suggestion) => (
+                      <button key={suggestion.placeId} type="button" role="option" aria-selected={false}
+                        onClick={() => selectSuggestion(suggestion.placeId)}
+                        className="block w-full border-t border-[#EFE8DA] px-3 py-3 text-left text-sm hover:bg-[#F2F4ED]">
+                        {suggestion.description}
+                      </button>
+                    ))}
+                    <p className="border-t border-[#EFE8DA] px-3 py-1.5 text-right text-[11px] text-[#5B6458]" translate="no" style={{ fontFamily: "Roboto, sans-serif", fontSize: 12, color: "#5E5E5E" }}>Google Maps</p>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -274,7 +371,7 @@ export function CheckoutPage({
                   id="chk-line2"
                   type="text"
                   value={line2}
-                  onChange={(e) => setLine2(e.target.value)}
+                  onChange={(e) => {setLine2(e.target.value);setAddressConfirmed(false);}}
                   className="mt-1.5 min-h-[42px] w-full rounded-lg border border-[#DDD4C4] bg-[#F4EFE4]/60 px-3.5 text-sm"
                 />
               </div>
@@ -289,20 +386,20 @@ export function CheckoutPage({
                     type="text"
                     required
                     value={city}
-                    onChange={(e) => setCity(e.target.value)}
+                    onChange={(e) => {setCity(e.target.value);setAddressConfirmed(false);}}
                     className="mt-1.5 min-h-[42px] w-full rounded-lg border border-[#DDD4C4] bg-[#F4EFE4]/60 px-3.5 text-sm"
                   />
                 </div>
                 <div>
                   <label htmlFor="chk-state" className="block text-xs font-medium text-[#1F241E]">
-                    State / Province *
+                    State (2-letter code) *
                   </label>
                   <input
                     id="chk-state"
                     type="text"
                     required
                     value={stateCode}
-                    onChange={(e) => setStateCode(e.target.value)}
+                    onChange={(e) => {setStateCode(e.target.value.toUpperCase().slice(0,2));setAddressConfirmed(false);}}
                     className="mt-1.5 min-h-[42px] w-full rounded-lg border border-[#DDD4C4] bg-[#F4EFE4]/60 px-3.5 text-sm"
                   />
                 </div>
@@ -315,7 +412,7 @@ export function CheckoutPage({
                     type="text"
                     required
                     value={postalCode}
-                    onChange={(e) => setPostalCode(e.target.value)}
+                    onChange={(e) => {setPostalCode(e.target.value);setAddressConfirmed(false);}}
                     className="mt-1.5 min-h-[42px] w-full rounded-lg border border-[#DDD4C4] bg-[#F4EFE4]/60 px-3.5 text-sm"
                   />
                 </div>
@@ -330,7 +427,7 @@ export function CheckoutPage({
                   type="text"
                   required
                   value={country}
-                  onChange={(e) => setCountry(e.target.value)}
+                  readOnly
                   className="mt-1.5 min-h-[42px] w-full rounded-lg border border-[#DDD4C4] bg-[#F4EFE4]/60 px-3.5 text-sm"
                 />
               </div>
@@ -360,9 +457,34 @@ export function CheckoutPage({
                 </div>
               )}
 
+              {addressReview && (
+                <div className="rounded-xl border border-[#B8C7AF] bg-[#F1F4EB] p-4 text-sm">
+                  <p className="font-semibold text-[#24402E]">Please confirm the delivery address</p>
+                  <p className="mt-2 leading-6 text-[#435143]">
+                    {addressReview.line1}{addressReview.line2 ? `, ${addressReview.line2}` : ''},
+                    {' '}{addressReview.city}, {addressReview.state} {addressReview.postalCode}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" onClick={useSuggestedAddress}
+                      className="rounded-lg bg-[#24402E] px-3 py-2 text-xs font-medium text-white">Use suggested address</button>
+                    <button type="button" onClick={() => { setAddressConfirmed(true); setAddressReview(null); setError(''); }}
+                      className="rounded-lg border border-[#24402E] px-3 py-2 text-xs font-medium text-[#24402E]">My entered address is correct</button>
+                  </div>
+                </div>
+              )}
+              {shippingEstimateError && (
+                <div role="alert" className="rounded-xl border border-[#D7BA9D] bg-[#FCF3E8] p-4 text-sm text-[#66462D]">
+                  {shippingEstimateError}
+                  {shippingEstimateError.includes('quote') && (
+                    <button type="button" onClick={() => onNavigate('/commissions')}
+                      className="mt-3 block font-semibold text-[#24402E] underline">Request a studio shipping quote</button>
+                  )}
+                </div>
+              )}
+
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || Boolean(shippingEstimateError)}
                 className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg bg-[#24402E] px-6 py-3 text-sm font-medium text-[#FBF8F1] transition-colors hover:bg-[#1B3123] disabled:opacity-60"
               >
                 <Lock className="h-4 w-4" aria-hidden="true" />
@@ -374,8 +496,9 @@ export function CheckoutPage({
               </button>
 
               <p className="text-center text-xs text-[#5B6458]">
-                Card processing is handled securely by Square. Orders are only marked paid after
-                Square verifies settlement.
+                Shipping is currently available within the contiguous United States.
+                Address verification runs before Square payment when enabled.
+                Card processing is securely handled by Square.
               </p>
             </form>
 
