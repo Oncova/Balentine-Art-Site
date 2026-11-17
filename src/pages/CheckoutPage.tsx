@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
 import {
   AlertCircle,
   ArrowRight,
@@ -37,10 +37,12 @@ export function CheckoutPage({
   const [country, setCountry] = useState('United States');
   const [notes, setNotes] = useState('');
   const [addressEnabled, setAddressEnabled] = useState(false);
-  const [suggestions, setSuggestions] = useState<Array<{ placeId: string; description: string }>>([]);
+  type AddressSuggestion = { id: string; description: string; address: {line1:string;line2?:string;city:string;state:string;postalCode:string;country:string} };
+  const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
+  const [suggestionsError, setSuggestionsError] = useState('');
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [skipSuggestions, setSkipSuggestions] = useState(false);
-  const [addressSessionToken] = useState(() => crypto.randomUUID());
   const [addressReview, setAddressReview] = useState<null | {
     line1: string; line2?: string; city: string; state: string; postalCode: string; country: string;
   }>(null);
@@ -91,51 +93,78 @@ export function CheckoutPage({
     }
   }, []);
 
-  // Google suggestions are optional until the studio enables its server-side API key.
+  // Geoapify is called through our Worker. The API key never reaches the browser.
   useEffect(() => {
-    fetch('/api/address/config').then(r => r.json()).then(data => setAddressEnabled(Boolean(data.enabled))).catch(() => {});
+    fetch('/api/address/config').then(r => r.json())
+      .then(data => setAddressEnabled(Boolean(data.enabled && data.provider === 'geoapify')))
+      .catch(() => setAddressEnabled(false));
   }, []);
 
   useEffect(() => {
-    if (!addressEnabled || skipSuggestions || line1.trim().length < 3) {
+    setActiveSuggestionIndex(-1);
+    setSuggestionsError('');
+    if (!addressEnabled || skipSuggestions || line1.trim().length < 4) {
       setSuggestions([]);
+      setSuggestionsLoading(false);
       return;
     }
-    let canceled = false;
+    const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       setSuggestionsLoading(true);
       try {
         const r = await fetch('/api/address/suggest', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ input: line1.trim(), sessionToken: addressSessionToken }),
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ input: line1.trim() }),
+          signal: controller.signal,
         });
         const data = await r.json();
-        if (!canceled) setSuggestions(r.ok ? (data.suggestions || []) : []);
-      } catch { if (!canceled) setSuggestions([]); }
-      finally { if (!canceled) setSuggestionsLoading(false); }
-    }, 350);
-    return () => { canceled = true; window.clearTimeout(timer); };
-  }, [line1, addressEnabled, addressSessionToken, skipSuggestions]);
+        if (!r.ok) throw new Error(data.error || 'Address suggestions unavailable.');
+        if (!controller.signal.aborted) setSuggestions(data.suggestions || []);
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          setSuggestions([]);
+          setSuggestionsError(err instanceof Error ? err.message : 'Address suggestions are unavailable.');
+        }
+      } finally {
+        if (!controller.signal.aborted) setSuggestionsLoading(false);
+      }
+    }, 550); // Debounce helps stay within Geoapify's free plan.
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [line1, addressEnabled, skipSuggestions]);
 
-  const selectSuggestion = async (placeId: string) => {
+  const selectSuggestion = (suggestion: AddressSuggestion) => {
+    const a = suggestion.address;
+    setLine1(a.line1);
+    setCity(a.city);
+    setStateCode(a.state);
+    setPostalCode(a.postalCode);
+    setCountry('United States');
+    // Keep any apartment/suite text already entered by the customer.
+    setSkipSuggestions(true);
     setSuggestions([]);
-    try {
-      const r = await fetch('/api/address/details', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ placeId, sessionToken: addressSessionToken }),
-      });
-      const data = await r.json();
-      if (!r.ok || !data.address?.line1) throw new Error('Please enter the full street address manually.');
-      setLine1(data.address.line1);
-      setCity(data.address.city || '');
-      setStateCode(data.address.state || '');
-      setPostalCode(data.address.postalCode || '');
-      setCountry('United States');
+    setActiveSuggestionIndex(-1);
+    setSuggestionsError('');
+    setError('');
+    setAddressReview(null);
+    setAddressConfirmed(false);
+  };
+
+  const onStreetKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (!suggestions.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveSuggestionIndex(i => (i + 1) % suggestions.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveSuggestionIndex(i => (i <= 0 ? suggestions.length - 1 : i - 1));
+    } else if (e.key === 'Enter' && activeSuggestionIndex >= 0) {
+      e.preventDefault();
+      selectSuggestion(suggestions[activeSuggestionIndex]);
+    } else if (e.key === 'Escape') {
+      setSuggestions([]);
       setSkipSuggestions(true);
-      setAddressReview(null);
-      setAddressConfirmed(false);
-    } catch {
-      setError('Could not load that address. Please complete the address manually.');
+      setActiveSuggestionIndex(-1);
     }
   };
 
@@ -197,7 +226,6 @@ export function CheckoutPage({
             country,
           },
           notes,
-          addressSessionToken,
           addressConfirmed,
           items: items.map((i) => ({
             artworkId: i.artworkId,
@@ -342,23 +370,33 @@ export function CheckoutPage({
                     setAddressConfirmed(false); setAddressReview(null);
                   }}
                   autoComplete="off"
+                  role={addressEnabled ? 'combobox' : undefined}
                   aria-autocomplete={addressEnabled ? 'list' : 'none'}
+                  aria-expanded={addressEnabled && suggestions.length > 0}
+                  aria-activedescendant={activeSuggestionIndex >= 0 ? `address-option-${activeSuggestionIndex}` : undefined}
                   aria-controls="address-suggestions"
+                  onKeyDown={onStreetKeyDown}
                   className="mt-1.5 min-h-[42px] w-full rounded-lg border border-[#DDD4C4] bg-[#F4EFE4]/60 px-3.5 text-sm"
                 />
-                {addressEnabled && <p className="mt-1.5 text-xs text-[#5B6458]">Start typing for address suggestions. We'll check the address before payment.</p>}
+                {addressEnabled && <p className="mt-1.5 text-xs text-[#5B6458]">Start typing for U.S. address suggestions. Please confirm your complete delivery address before payment.</p>}
+                {addressEnabled && <p className="mt-1 text-[11px] text-[#5B6458]" translate="no">
+                  Powered by <a href="https://www.geoapify.com/" target="_blank" rel="noopener noreferrer" className="underline">Geoapify</a> · Data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer" className="underline">OpenStreetMap contributors</a>
+                </p>}
+                {suggestionsError && <p role="status" className="mt-1 text-xs text-[#9A3412]">{suggestionsError}</p>}
                 {addressEnabled && (suggestions.length > 0 || suggestionsLoading) && (
                   <div id="address-suggestions" role="listbox" aria-label="Suggested United States addresses"
                     className="mt-2 overflow-hidden rounded-lg border border-[#DDD4C4] bg-white shadow-lg">
                     {suggestionsLoading && <p className="px-3 py-2 text-xs text-[#5B6458]">Finding addresses...</p>}
-                    {suggestions.map((suggestion) => (
-                      <button key={suggestion.placeId} type="button" role="option" aria-selected={false}
-                        onClick={() => selectSuggestion(suggestion.placeId)}
-                        className="block w-full border-t border-[#EFE8DA] px-3 py-3 text-left text-sm hover:bg-[#F2F4ED]">
+                    {suggestions.map((suggestion, index) => (
+                      <button key={suggestion.id} id={`address-option-${index}`} type="button" role="option"
+                        aria-selected={activeSuggestionIndex === index}
+                        onMouseEnter={() => setActiveSuggestionIndex(index)}
+                        onMouseDown={e => e.preventDefault()}
+                        onClick={() => selectSuggestion(suggestion)}
+                        className={`block w-full border-t border-[#EFE8DA] px-3 py-3 text-left text-sm hover:bg-[#F2F4ED] ${activeSuggestionIndex === index ? 'bg-[#F2F4ED]' : ''}`}>
                         {suggestion.description}
                       </button>
                     ))}
-                    <p className="border-t border-[#EFE8DA] px-3 py-1.5 text-right text-[11px] text-[#5B6458]" translate="no" style={{ fontFamily: "Roboto, sans-serif", fontSize: 12, color: "#5E5E5E" }}>Google Maps</p>
                   </div>
                 )}
               </div>
@@ -497,7 +535,7 @@ export function CheckoutPage({
 
               <p className="text-center text-xs text-[#5B6458]">
                 Shipping is currently available within the contiguous United States.
-                Address verification runs before Square payment when enabled.
+                Geoapify checks for a geographic match before Square payment; it does not verify USPS delivery.
                 Card processing is securely handled by Square.
               </p>
             </form>
