@@ -1,3 +1,4 @@
+import { InventoryPanel } from './InventoryPanel';
 import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
 import {
   CheckCircle2,
@@ -558,6 +559,15 @@ export function AdminPage({ onRefreshPublicCatalog }: AdminPageProps) {
         {/* TAB 1: Artworks & Variations */}
         {activeTab === 'artworks' && (
           <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:items-start">
+            <div className="lg:col-span-12">
+              <InventoryPanel
+                token={token}
+                onSaved={async () => {
+                  await loadAdminData(token);
+                  await onRefreshPublicCatalog();
+                }}
+              />
+            </div>
             <div className="space-y-3 lg:col-span-4">
               <button
                 type="button"
@@ -1476,3 +1486,4 @@ function OrderAdminCard({
     </div>
   );
 }
+
