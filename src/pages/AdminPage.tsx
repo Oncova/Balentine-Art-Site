@@ -1371,6 +1371,24 @@ function OrderAdminCard({
   const [carrier, setCarrier] = useState(order.carrier || 'USPS');
   const [trackingNumber, setTrackingNumber] = useState(order.trackingNumber || '');
   const [saving, setSaving] = useState(false);
+  const [copyMessage, setCopyMessage] = useState('');
+
+  const shippingAddressText = [
+    order.customerName,
+    order.shippingAddress.line1,
+    order.shippingAddress.line2,
+    `${order.shippingAddress.city}, ${order.shippingAddress.state} ${order.shippingAddress.postalCode}`,
+    order.shippingAddress.country,
+  ].filter(Boolean).join('\n');
+
+  const copyShippingAddress = async () => {
+    try {
+      await navigator.clipboard.writeText(shippingAddressText);
+      setCopyMessage('Address copied! Paste it into USPS.');
+    } catch {
+      setCopyMessage('Could not copy automatically. Please select the address above to copy it.');
+    }
+  };
 
   const submit = async (sendTrackingEmail: boolean) => {
     setSaving(true);
@@ -1419,9 +1437,30 @@ function OrderAdminCard({
               </li>
             ))}
           </ul>
-          <p className="mt-2">
-            {order.shippingAddress.line1}, {order.shippingAddress.city},{' '}
-            {order.shippingAddress.state} {order.shippingAddress.postalCode}
+          <p className="mt-2 whitespace-pre-line leading-relaxed">{shippingAddressText}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={copyShippingAddress}
+              className="min-h-[36px] rounded border border-[#24402E] bg-[#F4EFE4] px-3 text-xs font-medium text-[#24402E] hover:bg-[#EFE8DA]"
+            >
+              Copy Shipping Address
+            </button>
+            <a
+              href="https://cnsb.usps.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-[36px] items-center rounded bg-[#24402E] px-3 text-xs font-medium text-[#FBF8F1] hover:bg-[#1B3123]"
+            >
+              Create USPS Label ↗
+            </a>
+          </div>
+          {copyMessage && (
+            <p role="status" className="mt-2 text-xs text-[#24402E]">{copyMessage}</p>
+          )}
+          <p className="mt-2 text-[11px] leading-relaxed">
+            Purchase and print the label on USPS. Then enter its tracking number here and
+            save the order. USPS does not automatically receive this address or update the order.
           </p>
         </div>
 
@@ -1461,6 +1500,16 @@ function OrderAdminCard({
               placeholder="9400..."
               className="mt-1 min-h-[36px] w-full rounded border border-[#DDD4C4] bg-[#F4EFE4] px-2.5 text-xs"
             />
+            {trackingNumber.trim() && carrier.trim().toUpperCase() === 'USPS' && (
+              <a
+                href={`https://tools.usps.com/go/TrackConfirmAction?tLabels=${encodeURIComponent(trackingNumber.trim())}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-block text-[11px] font-medium text-[#24402E] underline"
+              >
+                Track on USPS ↗
+              </a>
+            )}
           </div>
           <div className="flex items-end gap-2 sm:col-span-3">
             <button
